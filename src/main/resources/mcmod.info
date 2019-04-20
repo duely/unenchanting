@@ -2,7 +2,7 @@
   {
     "modid": "unenchanting",
     "name": "Unenchanting",
-    "description": "Providing ways to losslessly remove enchantments with Botania or Astral Sorcery.",
+    "description": "Providing ways to losslessly remove enchantments with an anvil.",
     "version": "${version}",
     "credits": "Noobanidus",
     "logoFile": "assets/unenchanting/textures/logo.png",
@@ -15,7 +15,7 @@
     "parent": "",
     "screenshots": [],
     "dependencies": [
-      "forge,astralsorcery,botania"
+      "forge"
     ]
   }
 ]
