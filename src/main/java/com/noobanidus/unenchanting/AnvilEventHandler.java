@@ -1,5 +1,6 @@
 package com.noobanidus.unenchanting;
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentHelper;
@@ -7,7 +8,6 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Items;
 import net.minecraft.inventory.*;
 import net.minecraft.item.ItemBook;
-import net.minecraft.item.ItemEnchantedBook;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
@@ -19,10 +19,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.oredict.OreIngredient;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Mod.EventBusSubscriber(modid = Unenchanting.MODID)
 @SuppressWarnings("unused")
@@ -31,6 +28,7 @@ public class AnvilEventHandler {
     private static Map<ItemStack, ItemStack> outputCache = new HashMap<>();
     private static Object2IntOpenHashMap<ItemStack> costCache = new Object2IntOpenHashMap<>();
     private static Object2IntOpenHashMap<ItemStack> indexCache = new Object2IntOpenHashMap<>();
+    private static Int2ObjectOpenHashMap<List<AnvilListener>> listenersMap = new Int2ObjectOpenHashMap<>();
     private static OreIngredient book = null;
 
     @SubscribeEvent
@@ -123,6 +121,7 @@ public class AnvilEventHandler {
         ItemStack input = event.getItemInput();
         ItemStack books = event.getIngredientInput();
         ItemStack output = event.getItemResult();
+        EntityPlayer player = event.getEntityPlayer();
 
         if ((book.apply(books) || books.getItem() instanceof ItemBook) && output.getItem() == Items.ENCHANTED_BOOK) {
             int index = indexCache.getOrDefault(input, -1);
@@ -151,30 +150,45 @@ public class AnvilEventHandler {
                 compound.setTag("ench", enchantments);
             }
 
-            EntityPlayer player = event.getEntityPlayer();
             if (player.openContainer instanceof ContainerRepair) {
                 ContainerRepair anvil = (ContainerRepair) player.openContainer;
-                anvil.addListener(new AnvilListener(unenchanted, books));
+                AnvilListener listener = new AnvilListener(anvil, unenchanted, books);
+                List<AnvilListener> listeners = listenersMap.computeIfAbsent(anvil.windowId, ArrayList::new);
+                anvil.addListener(listener);
+                listeners.add(listener);
             } else {
-                // Not sure this can ever happen?
+                // If the anvil breaks
                 boolean drop = !player.inventory.addItemStackToInventory(unenchanted);
                 if (drop) {
                     player.dropItem(unenchanted, true, false);
+                    player.dropItem(books, true, false);
+                }
+            }
+        } else {
+            if (player.openContainer instanceof ContainerRepair) {
+                ContainerRepair anvil = (ContainerRepair) player.openContainer;
+                List<AnvilListener> listeners = listenersMap.get(anvil.windowId);
+                if (listeners != null && !listeners.isEmpty()) {
+                    for (AnvilListener listener : listeners) {
+                        listener.invalidate(anvil);
+                    }
                 }
             }
         }
     }
 
     public static class AnvilListener implements IContainerListener {
-        private ItemStack restore;
-        private ItemStack books;
+        private final ItemStack restore;
+        private final ItemStack books;
+        private final ContainerRepair anvil;
+        private boolean valid = true;
 
         private int restoreFired = 0;
 
-        public AnvilListener(ItemStack restore, ItemStack books) {
+        public AnvilListener(ContainerRepair anvil, ItemStack restore, ItemStack books) {
+            this.anvil = anvil;
             this.restore = restore;
             this.books = books;
-            books.shrink(1);
         }
 
         @SubscribeEvent
@@ -200,31 +214,31 @@ public class AnvilEventHandler {
 
         @Override
         public void sendSlotContents(Container containerToSend, int slotInd, ItemStack stack) {
-            if (containerToSend.getSlot(2).getHasStack() && containerToSend.getSlot(2).getStack().getItem() instanceof ItemEnchantedBook) {
-                if (slotInd == 0 && stack.isEmpty()) {
-                    Slot left = containerToSend.getSlot(slotInd);
-                    left.putStack(restore);
-                    restoreFired++;
-                    if (restoreFired == 2)
-                        containerToSend.removeListener(this);
-                } else if (slotInd == 1 && stack.isEmpty()) {
-                    Slot right = containerToSend.getSlot(slotInd);
-                    right.putStack(books);
-                    restoreFired++;
-                    if (restoreFired == 2)
-                        containerToSend.removeListener(this);
-                }
+            if (restoreFired == 2 || !valid) return;
+
+            if (slotInd == 0 && stack.isEmpty()) {
+                Slot left = containerToSend.getSlot(slotInd);
+                left.putStack(restore);
+                restoreFired++;
+            } else if (slotInd == 1 && stack.isEmpty()) {
+                Slot right = containerToSend.getSlot(slotInd);
+                right.putStack(books);
+                restoreFired++;
             }
         }
 
         @Override
         public void sendWindowProperty(Container containerIn, int varToUpdate, int newValue) {
-
         }
 
         @Override
         public void sendAllWindowProperties(Container containerIn, IInventory inventory) {
+        }
 
+        public void invalidate(ContainerRepair anvil) {
+            if (this.anvil == anvil) {
+                this.valid = false;
+            }
         }
     }
 }
