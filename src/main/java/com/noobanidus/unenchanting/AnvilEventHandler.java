@@ -123,7 +123,7 @@ public class AnvilEventHandler {
         ItemStack output = event.getItemResult();
         EntityPlayer player = event.getEntityPlayer();
 
-        if ((book.apply(books) || books.getItem() instanceof ItemBook) && output.getItem() == Items.ENCHANTED_BOOK) {
+        if (books != null && !books.isEmpty() && (book.apply(books) || books.getItem() instanceof ItemBook) && output.getItem() == Items.ENCHANTED_BOOK) {
             int index = indexCache.getOrDefault(input, -1);
             NBTTagList enchantments = cache.getOrDefault(input, null);
 
