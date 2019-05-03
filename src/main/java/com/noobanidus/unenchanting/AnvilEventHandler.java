@@ -293,7 +293,7 @@ public class AnvilEventHandler {
             int meta = input.getMetadata();
             int item = RecipeItemHelper.pack(input);
 
-            return bookMap.get(item) == meta;
+            return bookMap.get(item) == meta || bookMap.get(item) == -1;
         }
     }
 }

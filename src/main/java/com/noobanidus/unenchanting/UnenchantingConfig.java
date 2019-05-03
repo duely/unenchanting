@@ -16,7 +16,7 @@ public class UnenchantingConfig {
     @Config.Name("Base XP Cost")
     public static int BASE_LEVEL_COST = 2;
 
-    @Config.Comment("List of books that can be enchanted with StoredEnchantments. Format: minecraft:book,0. When 0, metadata can be ommitted. This is for additional items not contained within the 'books' ore dictionary entry.")
+    @Config.Comment("List of books that can be enchanted with StoredEnchantments. Format: minecraft:book,0. When 0, metadata can be ommitted. Use * to denote any metadata. This is for additional items not contained within the 'books' ore dictionary entry.")
     @Config.Name("Book Names")
     public static String[] books = new String[] {
             "minecraft:book,0"
@@ -39,7 +39,14 @@ public class UnenchantingConfig {
             int meta = 0;
             String[] rl = book.split(":");
             if (book.contains(",")) {
-                meta = Integer.parseInt(book.split(",")[1]);
+                String sMeta = book.split(",")[1];
+                try {
+                    meta = Integer.parseInt(sMeta);
+                } catch (NumberFormatException e) {
+                    if (!sMeta.isEmpty() && sMeta.trim().equals("*")) {
+                        meta = -1;
+                    }
+                }
                 rl = book.split(",")[0].split(":");
             }
             ResourceLocation rel = new ResourceLocation(rl[0], rl[1]);
