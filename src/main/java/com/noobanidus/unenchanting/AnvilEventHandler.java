@@ -1,14 +1,17 @@
 package com.noobanidus.unenchanting;
 
+import com.google.common.base.Predicate;
+import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+import net.minecraft.client.util.RecipeItemHelper;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Items;
 import net.minecraft.inventory.*;
-import net.minecraft.item.ItemBook;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.crafting.Ingredient;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.util.NonNullList;
@@ -19,7 +22,11 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.oredict.OreIngredient;
 
-import java.util.*;
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Mod.EventBusSubscriber(modid = Unenchanting.MODID)
 @SuppressWarnings("unused")
@@ -29,17 +36,22 @@ public class AnvilEventHandler {
     private static Object2IntOpenHashMap<ItemStack> costCache = new Object2IntOpenHashMap<>();
     private static Object2IntOpenHashMap<ItemStack> indexCache = new Object2IntOpenHashMap<>();
     private static Int2ObjectOpenHashMap<List<AnvilListener>> listenersMap = new Int2ObjectOpenHashMap<>();
-    private static OreIngredient book = null;
+    private static BookIngredient book = null;
+    private static Ingredient enchantedBook = Ingredient.fromItem(Items.ENCHANTED_BOOK);
 
     @SubscribeEvent
     public static void onAnvilUpdate(AnvilUpdateEvent event) {
         if (book == null) {
-            book = new OreIngredient("book");
+            book = new BookIngredient();
         }
 
         ItemStack left = event.getLeft();
         ItemStack right = event.getRight();
-        if (!book.apply(right) && !(right.getItem() instanceof ItemBook)) {
+        if (!book.apply(right)) {
+            return;
+        }
+
+        if (enchantedBook.apply(left) && enchantedBook.apply(right) || enchantedBook.apply(right)) {
             return;
         }
 
@@ -123,7 +135,12 @@ public class AnvilEventHandler {
         ItemStack output = event.getItemResult();
         EntityPlayer player = event.getEntityPlayer();
 
-        if (books != null && !books.isEmpty() && (book.apply(books) || books.getItem() instanceof ItemBook) && output.getItem() == Items.ENCHANTED_BOOK) {
+        if (enchantedBook.apply(input) && enchantedBook.apply(books)) {
+            invalidate(player);
+            return;
+        }
+
+        if (books != null && !books.isEmpty() && book.apply(books) && enchantedBook.apply(output)) {
             int index = indexCache.getOrDefault(input, -1);
             NBTTagList enchantments = cache.getOrDefault(input, null);
 
@@ -140,19 +157,21 @@ public class AnvilEventHandler {
             NBTTagCompound compound = unenchanted.getTagCompound();
             assert compound != null;
 
+            String tag = book ? "StoredEnchantments" : "ench";
+
             if (enchantments.tagCount() == 0) {
                 if (book) {
                     unenchanted = new ItemStack(Items.BOOK, 1);
                 } else {
-                    compound.removeTag("ench");
+                    compound.removeTag(tag);
                 }
             } else {
-                compound.setTag("ench", enchantments);
+                compound.setTag(tag, enchantments);
             }
 
             if (player.openContainer instanceof ContainerRepair) {
                 ContainerRepair anvil = (ContainerRepair) player.openContainer;
-                AnvilListener listener = new AnvilListener(anvil, unenchanted, books);
+                AnvilListener listener = new AnvilListener(anvil, unenchanted, books, player);
                 List<AnvilListener> listeners = listenersMap.computeIfAbsent(anvil.windowId, ArrayList::new);
                 anvil.addListener(listener);
                 listeners.add(listener);
@@ -165,13 +184,17 @@ public class AnvilEventHandler {
                 }
             }
         } else {
-            if (player.openContainer instanceof ContainerRepair) {
-                ContainerRepair anvil = (ContainerRepair) player.openContainer;
-                List<AnvilListener> listeners = listenersMap.get(anvil.windowId);
-                if (listeners != null && !listeners.isEmpty()) {
-                    for (AnvilListener listener : listeners) {
-                        listener.invalidate(anvil);
-                    }
+            invalidate(player);
+        }
+    }
+
+    public static void invalidate(EntityPlayer player) {
+        if (player.openContainer instanceof ContainerRepair) {
+            ContainerRepair anvil = (ContainerRepair) player.openContainer;
+            List<AnvilListener> listeners = listenersMap.get(anvil.windowId);
+            if (listeners != null && !listeners.isEmpty()) {
+                for (AnvilListener listener : listeners) {
+                    listener.invalidate(anvil, player);
                 }
             }
         }
@@ -182,13 +205,16 @@ public class AnvilEventHandler {
         private final ItemStack books;
         private final ContainerRepair anvil;
         private boolean valid = true;
+        private final EntityPlayer player;
 
         private int restoreFired = 0;
 
-        public AnvilListener(ContainerRepair anvil, ItemStack restore, ItemStack books) {
+        public AnvilListener(ContainerRepair anvil, ItemStack restore, ItemStack books, EntityPlayer player) {
+            Unenchanting.LOG.info("AnvilListener created for " + anvil.hashCode() + " with item to restore: " + restore.toString() + " and books stack: " + books.toString());
             this.anvil = anvil;
             this.restore = restore;
             this.books = books;
+            this.player = player;
         }
 
         @SubscribeEvent
@@ -216,13 +242,20 @@ public class AnvilEventHandler {
         public void sendSlotContents(Container containerToSend, int slotInd, ItemStack stack) {
             if (restoreFired == 2 || !valid) return;
 
+            if (enchantedBook.apply(books)) {
+                this.valid = false;
+                return;
+            }
+
             if (slotInd == 0 && stack.isEmpty()) {
                 Slot left = containerToSend.getSlot(slotInd);
                 left.putStack(restore);
+                Unenchanting.LOG.info("Put " + restore.toString() + " into the left slot");
                 restoreFired++;
-            } else if (slotInd == 1 && stack.isEmpty()) {
+            } else if (slotInd == 1 && stack.isEmpty() && books.getCount() > 1) {
                 Slot right = containerToSend.getSlot(slotInd);
                 right.putStack(books);
+                Unenchanting.LOG.info("Put " + books.toString() + " into the right slot");
                 restoreFired++;
             }
         }
@@ -235,10 +268,32 @@ public class AnvilEventHandler {
         public void sendAllWindowProperties(Container containerIn, IInventory inventory) {
         }
 
-        public void invalidate(ContainerRepair anvil) {
-            if (this.anvil == anvil) {
+        public void invalidate(ContainerRepair anvil, EntityPlayer player) {
+            if (this.anvil == anvil && this.player == player) {
                 this.valid = false;
             }
+        }
+    }
+
+    public static class BookIngredient implements Predicate<ItemStack> {
+        private final Int2IntOpenHashMap bookMap;
+        private final OreIngredient oreBook;
+
+        public BookIngredient() {
+            this.bookMap = UnenchantingConfig.getBooks();
+            this.oreBook = new OreIngredient("book");
+        }
+
+        @Override
+        public boolean apply(@Nullable ItemStack input) {
+            if (input == null) return false;
+
+            if (oreBook.apply(input)) return true;
+
+            int meta = input.getMetadata();
+            int item = RecipeItemHelper.pack(input);
+
+            return bookMap.get(item) == meta;
         }
     }
 }
