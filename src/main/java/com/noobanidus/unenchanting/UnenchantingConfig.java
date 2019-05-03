@@ -7,24 +7,25 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.common.config.Config;
 
-import java.util.ArrayList;
-import java.util.List;
-
 @Config(modid = Unenchanting.MODID)
 public class UnenchantingConfig {
-    @Config.Comment("The base level cost per enchantment on the book to remove the first enchantment")
+    @Config.Comment("The base level cost per enchantment on the book to remove the first enchantment, rounded up to the nearest integer.")
     @Config.Name("Base XP Cost")
-    public static int BASE_LEVEL_COST = 2;
+    public static double base_level_cost = 1.5;
 
     @Config.Comment("List of books that can be enchanted with StoredEnchantments. Format: minecraft:book,0. When 0, metadata can be ommitted. Use * to denote any metadata. This is for additional items not contained within the 'books' ore dictionary entry.")
     @Config.Name("Book Names")
-    public static String[] books = new String[] {
+    public static String[] books = new String[]{
             "minecraft:book,0"
     };
 
+    @Config.Comment("Removing an enchantment from an item reduces its repair cost")
+    @Config.Name("Reduce Repair Cost")
+    public static boolean reduceRepairCost = true;
+
     private static Int2IntOpenHashMap booksList = null;
 
-    public static Int2IntOpenHashMap getBooks () {
+    public static Int2IntOpenHashMap getBooks() {
         if (booksList == null) {
             booksList = parseBooks();
         }
@@ -32,7 +33,7 @@ public class UnenchantingConfig {
         return booksList;
     }
 
-    private static Int2IntOpenHashMap parseBooks () {
+    private static Int2IntOpenHashMap parseBooks() {
         Int2IntOpenHashMap result = new Int2IntOpenHashMap();
 
         for (String book : books) {

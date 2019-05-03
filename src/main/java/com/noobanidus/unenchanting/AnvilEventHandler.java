@@ -116,7 +116,7 @@ public class AnvilEventHandler {
             EnchantmentHelper.setEnchantments(bookEnchants, bookOutput);
             outputCache.put(left, bookOutput);
 
-            cost = UnenchantingConfig.BASE_LEVEL_COST * enchantments.tagCount();
+            cost = (int) Math.max(1, UnenchantingConfig.base_level_cost * enchantments.tagCount());
             costCache.put(left, cost);
 
             indexCache.put(left, usedIndex);
@@ -158,6 +158,17 @@ public class AnvilEventHandler {
             assert compound != null;
 
             String tag = book ? "StoredEnchantments" : "ench";
+
+            if (UnenchantingConfig.reduceRepairCost) {
+                if (compound.hasKey("RepairCost")) {
+                    int repairCost = compound.getInteger("RepairCost");
+                    if (repairCost == 1) {
+                        compound.removeTag("RepairCost");
+                    } else {
+                        compound.setInteger("RepairCost", repairCost - 1);
+                    }
+                }
+            }
 
             if (enchantments.tagCount() == 0) {
                 if (book) {
@@ -210,7 +221,6 @@ public class AnvilEventHandler {
         private int restoreFired = 0;
 
         public AnvilListener(ContainerRepair anvil, ItemStack restore, ItemStack books, EntityPlayer player) {
-            Unenchanting.LOG.info("AnvilListener created for " + anvil.hashCode() + " with item to restore: " + restore.toString() + " and books stack: " + books.toString());
             this.anvil = anvil;
             this.restore = restore;
             this.books = books;
@@ -250,12 +260,10 @@ public class AnvilEventHandler {
             if (slotInd == 0 && stack.isEmpty()) {
                 Slot left = containerToSend.getSlot(slotInd);
                 left.putStack(restore);
-                Unenchanting.LOG.info("Put " + restore.toString() + " into the left slot");
                 restoreFired++;
             } else if (slotInd == 1 && stack.isEmpty() && books.getCount() > 1) {
                 Slot right = containerToSend.getSlot(slotInd);
                 right.putStack(books);
-                Unenchanting.LOG.info("Put " + books.toString() + " into the right slot");
                 restoreFired++;
             }
         }
