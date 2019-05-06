@@ -301,6 +301,8 @@ public class AnvilEventHandler {
             int meta = input.getMetadata();
             int item = RecipeItemHelper.pack(input);
 
+            if (!bookMap.containsKey(item)) return false;
+
             return bookMap.get(item) == meta || bookMap.get(item) == -1;
         }
     }
