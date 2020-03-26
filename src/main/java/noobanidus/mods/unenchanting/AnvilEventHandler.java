@@ -15,11 +15,13 @@ import net.minecraft.item.crafting.Ingredient;
 import net.minecraft.nbt.CompoundNBT;
 import net.minecraft.nbt.ListNBT;
 import net.minecraft.util.NonNullList;
+import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.event.AnvilUpdateEvent;
 import net.minecraftforge.event.entity.player.AnvilRepairEvent;
 import net.minecraftforge.event.entity.player.PlayerContainerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -76,9 +78,9 @@ public class AnvilEventHandler {
           book = true;
         }
 
-        if (!tag.contains(book ? "StoredEnchantments" : "ench")) return;
+        if (!tag.contains(book ? "StoredEnchantments" : "Enchantments")) return;
 
-        enchantments = tag.getList(book ? "StoredEnchantments" : "ench", 10);
+        enchantments = tag.getList(book ? "StoredEnchantments" : "Enchantments", 10);
         cache.put(left, enchantments);
       }
 
@@ -91,7 +93,8 @@ public class AnvilEventHandler {
 
       for (int i = 0; i < enchantments.size(); i++) {
         eDef = enchantments.getCompound(i);
-        definition = Enchantment.getEnchantmentByID(eDef.getShort("id"));
+        ResourceLocation rl = new ResourceLocation(eDef.getString("id"));
+        definition = ForgeRegistries.ENCHANTMENTS.getValue(rl);
         if (definition == null || !definition.isAllowedOnBooks()) continue;
 
         usedIndex = i;
@@ -148,7 +151,7 @@ public class AnvilEventHandler {
       CompoundNBT compound = unenchanted.getTag();
       assert compound != null;
 
-      String tag = book ? "StoredEnchantments" : "ench";
+      String tag = book ? "StoredEnchantments" : "Enchantments";
 
       if (UnenchantingConfig.REDUCE_REPAIR_COST.get()) {
         if (compound.contains("RepairCost")) {
